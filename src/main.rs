@@ -1,10 +1,13 @@
 #![feature(io_error_more)]
 #![feature(duration_millis_float)]
 use core::fmt;
-use std::{io, net::{SocketAddr, ToSocketAddrs}, time::{Duration, Instant}};
+use std::{
+    io,
+    net::{SocketAddr, ToSocketAddrs},
+    time::{Duration, Instant},
+};
 
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-
 
 fn main() {
     println!("starting atr...");
@@ -24,7 +27,7 @@ fn main() {
     }
 }
 
-fn resolve_host_name(host_name: &str) -> Vec<SocketAddr>{
+fn resolve_host_name(host_name: &str) -> Vec<SocketAddr> {
     println!("hostname is {}", host_name);
     let ips: Vec<SocketAddr> = host_name.to_socket_addrs().unwrap().collect();
     ips
@@ -36,41 +39,39 @@ fn send_packet(socket: &Socket, addr: SocketAddr) {
         Ok(resp) => {
             let info = Info {
                 tt: t_start.elapsed().as_millis_f32(),
-                status: String::from("DONE")
+                status: String::from("DONE"),
             };
             println!("{}", info);
-        },
-        Err(error_info) => {
-            match error_info.kind() {
-                io::ErrorKind::ConnectionRefused => {
-                    let info = Info {
-                        tt: t_start.elapsed().as_millis_f32(),
-                        status: String::from("*")
-                    };
-                    println!("{}", info);
-                },
-                io::ErrorKind::HostUnreachable => {
-                    let info = Info {
-                        tt: t_start.elapsed().as_millis_f32(),
-                        status: String::from("OK")
-                    };
-                    println!("{}", info);
-                },
-                _ => {
-                    let info = Info {
-                        tt: t_start.elapsed().as_millis_f32(),
-                        status: String::from("***")
-                    };
-                    println!("{}", info);
-                },
-            }
         }
+        Err(error_info) => match error_info.kind() {
+            io::ErrorKind::ConnectionRefused => {
+                let info = Info {
+                    tt: t_start.elapsed().as_millis_f32(),
+                    status: String::from("*"),
+                };
+                println!("{}", info);
+            }
+            io::ErrorKind::HostUnreachable => {
+                let info = Info {
+                    tt: t_start.elapsed().as_millis_f32(),
+                    status: String::from("OK"),
+                };
+                println!("{}", info);
+            }
+            _ => {
+                let info = Info {
+                    tt: t_start.elapsed().as_millis_f32(),
+                    status: String::from("***"),
+                };
+                println!("{}", info);
+            }
+        },
     }
 }
 
 struct Info {
     tt: f32,
-    status: String
+    status: String,
 }
 
 impl fmt::Display for Info {
@@ -78,4 +79,3 @@ impl fmt::Display for Info {
         write!(f, "{} {}", self.tt, self.status)
     }
 }
-
