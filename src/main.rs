@@ -23,8 +23,18 @@ fn main() {
     for ttl in 1..64 {
         socket.set_ttl(ttl).unwrap();
         socket.set_read_timeout(Some(timeout)).unwrap();
-        send_packet(&socket, target_addr);
+        let info: Info = send_packet_t(&socket, target_addr);
+        println!("{}", info);
+        match info._status {
+            Status::DONE => {
+                break;
+            }
+            _ => {
+                continue;
+            }
+        }
     }
+
 }
 
 fn resolve_host_name(host_name: &str) -> Vec<SocketAddr> {
@@ -33,49 +43,59 @@ fn resolve_host_name(host_name: &str) -> Vec<SocketAddr> {
     ips
 }
 
-fn send_packet(socket: &Socket, addr: SocketAddr) {
+fn send_packet_t(socket: &Socket, addr: SocketAddr) -> Info {
     let t_start = Instant::now();
+    let info: Info;
     match socket.connect(&SockAddr::from(addr)) {
-        Ok(resp) => {
-            let info = Info {
+        Ok(_resp) => {
+            info = Info {
                 tt: t_start.elapsed().as_millis_f32(),
-                status: String::from("DONE"),
+                _status: Status::DONE,
+                status_line: String::from("DONE"),
             };
-            println!("{}", info);
         }
         Err(error_info) => match error_info.kind() {
             io::ErrorKind::ConnectionRefused => {
-                let info = Info {
+                info = Info {
                     tt: t_start.elapsed().as_millis_f32(),
-                    status: String::from("*"),
+                    _status: Status::ERR,
+                    status_line: String::from("*"),
                 };
-                println!("{}", info);
             }
             io::ErrorKind::HostUnreachable => {
-                let info = Info {
+                info = Info {
                     tt: t_start.elapsed().as_millis_f32(),
-                    status: String::from("OK"),
+                    _status: Status::OK,
+                    status_line: String::from("OK"),
                 };
-                println!("{}", info);
             }
             _ => {
-                let info = Info {
+                info = Info {
                     tt: t_start.elapsed().as_millis_f32(),
-                    status: String::from("***"),
+                    _status: Status::ERR,
+                    status_line: String::from("***"),
                 };
-                println!("{}", info);
             }
         },
     }
+
+    info
 }
 
 struct Info {
     tt: f32,
-    status: String,
+    _status: Status,
+    status_line: String,
+}
+
+enum Status {
+    DONE,
+    OK,
+    ERR,
 }
 
 impl fmt::Display for Info {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.3} ms {}", self.tt, self.status)
+        write!(f, "{:.3} ms {}", self.tt, self.status_line)
     }
 }
