@@ -76,6 +76,6 @@ struct Info {
 
 impl fmt::Display for Info {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.tt, self.status)
+        write!(f, "{:.3} ms {}", self.tt, self.status)
     }
 }
