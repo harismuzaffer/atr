@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 socket2 = { version = "0.5.7" }
+clap = { version = "4.5.11",  features = ["derive"]}
