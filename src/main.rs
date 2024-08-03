@@ -15,7 +15,7 @@ fn main() {
 
     let args = Args::parse();
 
-    let target_host = &args.target;
+    let target_host = &args.target_host;
     let target_addrs = resolve_host_name(target_host);
     println!("target_ips are {:?}", target_addrs);
     let target_addr = target_addrs[0];
@@ -106,10 +106,10 @@ impl fmt::Display for Info {
 #[derive(Parser, Debug)]
 struct Args {
     /// Protocol to be used e.g. tcp
-    #[clap(short, long)]
+    #[clap(short, long, default_value="tcp")]
     protocol: String,
 
     /// target host in IP v4 format
     #[clap(short, long)]
-    target: String,
+    target_host: String,
 }
