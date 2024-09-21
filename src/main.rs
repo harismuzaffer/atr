@@ -26,6 +26,7 @@ fn main() {
     for ttl in 1..64 {
         socket.set_ttl(ttl).unwrap();
         socket.set_read_timeout(Some(timeout)).unwrap();
+        socket.set_write_timeout(Some(timeout)).unwrap();
         let info: Info = send_packet_t(&socket, target_addr);
         println!("{}", info);
         match info._status {
@@ -106,7 +107,7 @@ impl fmt::Display for Info {
 #[derive(Parser, Debug)]
 struct Args {
     /// Protocol to be used e.g. tcp
-    #[clap(short, long, default_value="tcp")]
+    #[clap(short, long, default_value = "tcp")]
     protocol: String,
 
     /// target host in IP v4 format
