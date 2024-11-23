@@ -8,9 +8,7 @@ use std::{
 };
 
 use clap::Parser;
-use futures::{stream::FuturesUnordered, StreamExt};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use tokio::io::{unix::AsyncFd, Interest};
 
 #[tokio::main]
 async fn main() {
@@ -23,28 +21,11 @@ async fn main() {
     println!("target_ips are {:?}", target_addrs);
     let target_addr = target_addrs[0];
 
-    let mut futures = FuturesUnordered::new();
     for ttl in 1..64 {
-        let future = send_packet_t(ttl, target_addr);
-        futures.push(future);
-    }
-    loop {
-        tokio::select! {
-            r = futures.next() => {
-                match r.flatten() {
-                    Some(i) => {
-                        println!("Info: {}", i);
-                    }
-                    None => {
-                        println!("No Info");
-                        break;
-                    }
-                }
-            }
-            else => {
-                println!("nothing matched, breaking");
-                break
-            },
+        let info = send_packet_t(ttl, target_addr);
+        println!("{}", info);
+        if let Status::DONE = info._status {
+            break;
         }
     }
 }
@@ -55,70 +36,51 @@ fn resolve_host_name(host_name: &str) -> Vec<SocketAddr> {
     ips
 }
 
-async fn send_packet_t(ttl: u32, addr: SocketAddr) -> Option<Info> {
-    let timeout = Duration::from_secs(3);
+fn send_packet_t(ttl: u32, addr: SocketAddr) -> Info {
+    let timeout = Duration::from_secs(1);
     let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP)).unwrap();
     socket.set_read_timeout(Some(timeout)).unwrap();
     socket.set_write_timeout(Some(timeout)).unwrap();
-    socket.set_nonblocking(true).unwrap();
     socket.set_ttl(ttl).unwrap();
     let t_start = Instant::now();
 
-    socket.connect(&SockAddr::from(addr));
-
-    let async_fd = AsyncFd::new(socket).unwrap();
-    let timeout = Duration::from_secs(3);
-    let r = tokio::time::timeout(timeout, async {
-        async_fd
-            .async_io(Interest::WRITABLE, |socket| socket.take_error())
-            .await
-    })
-    .await;
+    let r = socket.connect(&SockAddr::from(addr));
 
     match r {
-        Err(_) => {
-            println!("Timeout");
-            None
-        }
-        Ok(result) => {
-            let info = match result {
-                Ok(None) => Info {
+        Ok(_) => Info {
+            ttl,
+            tt: t_start.elapsed().as_millis_f32(),
+            _status: Status::DONE,
+            status_line: String::from("DONE"),
+        },
+        Err(error) => {
+            let info = match error.kind() {
+                io::ErrorKind::ConnectionRefused => Info {
+                    ttl,
                     tt: t_start.elapsed().as_millis_f32(),
-                    _status: Status::DONE,
-                    status_line: String::from("DONE"),
+                    _status: Status::ERR,
+                    status_line: String::from("*"),
                 },
-                Ok(Some(error_info)) => {
-                    // println!("error info {:?}", error_info);
-                    match error_info.kind() {
-                        io::ErrorKind::ConnectionRefused => Info {
-                            tt: t_start.elapsed().as_millis_f32(),
-                            _status: Status::ERR,
-                            status_line: String::from("*"),
-                        },
-                        io::ErrorKind::HostUnreachable => Info {
-                            tt: t_start.elapsed().as_millis_f32(),
-                            _status: Status::OK,
-                            status_line: String::from("OK"),
-                        },
-                        _ => Info {
-                            tt: t_start.elapsed().as_millis_f32(),
-                            _status: Status::ERR,
-                            status_line: String::from("***"),
-                        },
-                    }
-                }
-                Err(_) => Info {
+                io::ErrorKind::HostUnreachable => Info {
+                    ttl,
+                    tt: t_start.elapsed().as_millis_f32(),
+                    _status: Status::OK,
+                    status_line: String::from("OK"),
+                },
+                _ => Info {
+                    ttl,
                     tt: t_start.elapsed().as_millis_f32(),
                     _status: Status::ERR,
                     status_line: String::from("***"),
                 },
             };
-            Some(info)
+            info
         }
     }
 }
 
 struct Info {
+    ttl: u32,
     tt: f32,
     _status: Status,
     status_line: String,
@@ -132,7 +94,7 @@ enum Status {
 
 impl fmt::Display for Info {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.3} ms {}", self.tt, self.status_line)
+        write!(f, "{} {:.3} ms {}", self.ttl, self.tt, self.status_line)
     }
 }
 
