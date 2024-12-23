@@ -3,11 +3,19 @@
 use core::fmt;
 use std::{
     io,
+    mem::MaybeUninit,
     net::{SocketAddr, ToSocketAddrs},
     time::{Duration, Instant},
 };
 
 use clap::Parser;
+use pnet::{
+    packet::{
+        icmp::{echo_request::MutableEchoRequestPacket, IcmpCode, IcmpTypes},
+        Packet,
+    },
+    util,
+};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 
 #[tokio::main]
@@ -21,10 +29,25 @@ async fn main() {
     println!("target_ips are {:?}", target_addrs);
     let target_addr = target_addrs[0];
 
+    let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::ICMPV4)).unwrap();
+    let timeout = Duration::from_millis(300);
+    socket.set_read_timeout(Some(timeout)).unwrap();
+    socket.set_write_timeout(Some(timeout)).unwrap();
     for ttl in 1..64 {
-        let info = send_packet_t(ttl, target_addr);
+        let t_start = Instant::now();
+        send_packet_icmp(&socket, ttl, target_addr, ttl as u16);
+        let (status, src) = recv_packet_icmp(&socket);
+
+        let info = Info {
+            ttl,
+            tt: t_start.elapsed().as_millis_f32(),
+            status,
+            source: src,
+        };
+
         println!("{}", info);
-        if let Status::DONE = info._status {
+
+        if status == Status::DONE {
             break;
         }
     }
@@ -34,6 +57,64 @@ fn resolve_host_name(host_name: &str) -> Vec<SocketAddr> {
     println!("hostname is {}", host_name);
     let ips: Vec<SocketAddr> = host_name.to_socket_addrs().unwrap().collect();
     ips
+}
+
+fn send_packet_icmp(socket: &Socket, ttl: u32, addr: SocketAddr, seq: u16) {
+    socket.set_ttl(ttl).unwrap();
+
+    let packet = create_echo_packet(seq);
+
+    socket.send_to(&packet, &SockAddr::from(addr)).unwrap();
+}
+
+fn recv_packet_icmp(socket: &Socket) -> (Status, String) {
+    let mut rbuf: [MaybeUninit<u8>; 512] = unsafe { MaybeUninit::uninit().assume_init() };
+    let resp = socket.recv_from(&mut rbuf);
+    let icmp_type = unsafe { rbuf[20].assume_init() };
+    match resp {
+        Ok((_size, address)) => {
+            if icmp_type == 11 {
+                (
+                    Status::OK,
+                    address.as_socket_ipv4().unwrap().ip().to_string(),
+                )
+            } else {
+                (
+                    Status::DONE,
+                    address.as_socket_ipv4().unwrap().ip().to_string(),
+                )
+            }
+        }
+        Err(_error) => (Status::ERR, "***".to_string()),
+    }
+}
+
+fn create_echo_packet(seq: u16) -> [u8; 28] {
+    let mut buf = [0u8; 28];
+
+    let mut echo_packet = MutableEchoRequestPacket::new(&mut buf).unwrap();
+    echo_packet.set_icmp_type(IcmpTypes::EchoRequest);
+    echo_packet.set_icmp_code(IcmpCode::new(0));
+    echo_packet.set_identifier(0x1234);
+    echo_packet.set_sequence_number(seq);
+    echo_packet.set_checksum(util::checksum(echo_packet.packet(), 1));
+
+    // let mut buf = [0u8; 28];
+    // let seq = 1;
+    // buf[0] = 0x08;
+    // buf[1] = 0x00;
+
+    // buf[4] = 0x12;
+    // buf[5] = 0x34;
+    // buf[6] = (seq >> 8) as u8;
+    // buf[7] = seq as u8;
+
+    // let checksum = util::checksum(&buf, 1);
+
+    // buf[2] = (checksum >> 8) as u8;
+    // buf[3] = checksum as u8;
+
+    return buf;
 }
 
 fn send_packet_t(ttl: u32, addr: SocketAddr) -> Info {
@@ -50,28 +131,28 @@ fn send_packet_t(ttl: u32, addr: SocketAddr) -> Info {
         Ok(_) => Info {
             ttl,
             tt: t_start.elapsed().as_millis_f32(),
-            _status: Status::DONE,
-            status_line: String::from("DONE"),
+            status: Status::DONE,
+            source: "".to_string(),
         },
         Err(error) => {
             let info = match error.kind() {
                 io::ErrorKind::ConnectionRefused => Info {
                     ttl,
                     tt: t_start.elapsed().as_millis_f32(),
-                    _status: Status::ERR,
-                    status_line: String::from("*"),
+                    status: Status::ERR,
+                    source: "".to_string(),
                 },
                 io::ErrorKind::HostUnreachable => Info {
                     ttl,
                     tt: t_start.elapsed().as_millis_f32(),
-                    _status: Status::OK,
-                    status_line: String::from("OK"),
+                    status: Status::OK,
+                    source: "".to_string(),
                 },
                 _ => Info {
                     ttl,
                     tt: t_start.elapsed().as_millis_f32(),
-                    _status: Status::ERR,
-                    status_line: String::from("***"),
+                    status: Status::ERR,
+                    source: "".to_string(),
                 },
             };
             info
@@ -82,10 +163,11 @@ fn send_packet_t(ttl: u32, addr: SocketAddr) -> Info {
 struct Info {
     ttl: u32,
     tt: f32,
-    _status: Status,
-    status_line: String,
+    status: Status,
+    source: String,
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
 enum Status {
     DONE,
     OK,
@@ -94,7 +176,11 @@ enum Status {
 
 impl fmt::Display for Info {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {:.3} ms {}", self.ttl, self.tt, self.status_line)
+        write!(
+            f,
+            "{} {:?} {} {:.3} ms",
+            self.source, self.status, self.ttl, self.tt
+        )
     }
 }
 
