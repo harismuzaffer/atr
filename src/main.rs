@@ -29,18 +29,11 @@ async fn main() {
     println!("target_ips are {:?}", target_addrs);
     let target_addr = target_addrs[0];
 
-    // for ttl in 1..64 {
-    //     let info = send_packet_t(ttl, target_addr);
-    //     println!("{}", info);
-    //     if let Status::DONE = info._status {
-    //         break;
-    //     }
-    // }
     let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::ICMPV4)).unwrap();
     let timeout = Duration::from_millis(300);
     socket.set_read_timeout(Some(timeout)).unwrap();
     socket.set_write_timeout(Some(timeout)).unwrap();
-    for ttl in 1..30 {
+    for ttl in 1..64 {
         let t_start = Instant::now();
         send_packet_icmp(&socket, ttl, target_addr, ttl as u16);
         let (status, src) = recv_packet_icmp(&socket);
