@@ -60,64 +60,6 @@ fn resolve_host_name(host_name: &str) -> Vec<SocketAddr> {
     ips
 }
 
-// fn send_packet_icmp(socket: &Socket, ttl: u32, addr: SocketAddr, seq: u16) {
-//     socket.set_ttl(ttl).unwrap();
-
-//     let packet = create_echo_packet(seq);
-
-//     socket.send_to(&packet, &SockAddr::from(addr)).unwrap();
-// }
-
-// fn recv_packet_icmp(socket: &Socket) -> (Status, String) {
-//     let mut rbuf: [MaybeUninit<u8>; 512] = unsafe { MaybeUninit::uninit().assume_init() };
-//     let resp = socket.recv_from(&mut rbuf);
-//     let icmp_type = unsafe { rbuf[20].assume_init() };
-//     match resp {
-//         Ok((_size, address)) => {
-//             if icmp_type == 11 {
-//                 (
-//                     Status::OK,
-//                     address.as_socket_ipv4().unwrap().ip().to_string(),
-//                 )
-//             } else {
-//                 (
-//                     Status::DONE,
-//                     address.as_socket_ipv4().unwrap().ip().to_string(),
-//                 )
-//             }
-//         }
-//         Err(_error) => (Status::ERR, "***".to_string()),
-//     }
-// }
-
-// fn create_echo_packet(seq: u16) -> [u8; 28] {
-//     let mut buf = [0u8; 28];
-
-//     let mut echo_packet = MutableEchoRequestPacket::new(&mut buf).unwrap();
-//     echo_packet.set_icmp_type(IcmpTypes::EchoRequest);
-//     echo_packet.set_icmp_code(IcmpCode::new(0));
-//     echo_packet.set_identifier(0x1234);
-//     echo_packet.set_sequence_number(seq);
-//     echo_packet.set_checksum(util::checksum(echo_packet.packet(), 1));
-
-//     // let mut buf = [0u8; 28];
-//     // let seq = 1;
-//     // buf[0] = 0x08;
-//     // buf[1] = 0x00;
-
-//     // buf[4] = 0x12;
-//     // buf[5] = 0x34;
-//     // buf[6] = (seq >> 8) as u8;
-//     // buf[7] = seq as u8;
-
-//     // let checksum = util::checksum(&buf, 1);
-
-//     // buf[2] = (checksum >> 8) as u8;
-//     // buf[3] = checksum as u8;
-
-//     return buf;
-// }
-
 fn send_packet_t(ttl: u32, addr: SocketAddr) -> Info {
     let timeout = Duration::from_secs(1);
     let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP)).unwrap();
